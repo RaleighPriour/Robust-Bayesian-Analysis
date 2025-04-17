@@ -350,9 +350,10 @@ class RobustBayesianAnalysis():
     def stats(self,ends:bool=None,posteior:bool=True):
         """
         ends: If False cuts outs the regions with less than .1% relative likelyhood from the graph recommened when dealing with 10**6 or more datapoints
+        posteior: If False displays and gives statistics as prior not posteior
         """
         print("------------------------------------")
-        print("Successes:{0}\tFailures{1}\tTotal:{2}".format(self.successes,self.failures,self.successes+self.failures))
+        print("Successes:{0}\tFailures:{1}\tTotal:{2}".format(self.successes,self.failures,self.successes+self.failures))
         X,upperProb,XLow,lowerProb=self.computeGraph(ends)
         a,b=self.successes,self.failures
         if self.successes<self.failures:
@@ -369,8 +370,7 @@ class RobustBayesianAnalysis():
         # df.to_csv("RBA {d} upper ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)    
         # data={"x":[round(float(x),6) for x in XLow],"y":[round(float(p),6) for p in lowerProb]}    
         # df=pd.DataFrame(data)
-        # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)      
-        print(len(set(X)))        
+        # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)          
         print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
         plt.plot(X,upperProb)
         plt.plot(XLow,lowerProb)
@@ -378,9 +378,6 @@ class RobustBayesianAnalysis():
         plt.ylabel("Probabilty")
         plt.title("Reasonable Postetiors")
         plt.legend(["Upper Probabilty","Lower Probabilty"])  
-        plt.show()   
-        plt.scatter(X,upperProb)
-        plt.plot(X,upperProb)     
         plt.show()   
 
 
@@ -407,49 +404,9 @@ class Demo(RobustBayesianAnalysis):
         print("Observed {0} Successes and {1} Failures".format(successes,failures))
         print("Total Successes {0} out of {1}".format(self.successes,self.successes+self.failures))        
 
-if __name__=="__main__":                 
-    Analysis=Demo(.5,2,125)  
-    Analysis.getData(10**22)
-    Analysis.stats(ends=False)         
-    Analysis=Demo(.70,10,125)
-    Analysis.stats(None,False)
-    Analysis.getData(20)
-    Analysis.stats(ends=True)
-    Analysis.getData(980)    
-    Analysis.stats(ends=True)
-    Analysis.getData(10**6)
-    Analysis.stats(ends=True)
-    Analysis.getData(10**12)
-    Analysis.stats(ends=False)   
-    Analysis=Demo(.0,10,125)
-    #Analysis.stats(None,False)
-    Analysis.getData(20)
-    Analysis.stats(ends=True)
-    Analysis.getData(980)    
-    Analysis.stats(ends=False)
-    Analysis.getData(10**6)
-    Analysis.stats(ends=False)
-    Analysis.getData(10**20)
-    Analysis.stats(ends=False)      
-    Analysis=Demo(.50,1000,125)
-    #Analysis.stats(None,False)
-    Analysis.getData(20)
-    Analysis.stats(ends=True)
-    Analysis.getData(980)    
-    Analysis.stats(ends=True)
-    Analysis.getData(10**6)
-    Analysis.stats(ends=True)
-    Analysis.getData(10**14)
-    Analysis.stats(ends=False)  
-    del Analysis
-    Analysis=Demo(.25,1000,1000)
-    #Analysis.stats(None,False)
-    Analysis.getData(20)
-    Analysis.stats(ends=True)
-    Analysis.getData(980)    
-    Analysis.stats(ends=True)
-    Analysis.getData(10**6)
-    Analysis.stats(ends=True)
-    Analysis.getData(10**12)
-    Analysis.stats(ends=False)          
-    #(1000,113) (100,35) (10000,338)
+if __name__=="__main__":         
+    Analysis=Demo(.7,10,250)  
+    Analysis.stats(True,False)
+    while True:
+        Analysis.getData(10)
+        Analysis.stats()
