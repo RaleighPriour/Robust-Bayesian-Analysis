@@ -1,11 +1,10 @@
 if __name__=="__main__":
     print("Libaries Loading")
 import matplotlib.pyplot as plt
-import mpmath.calculus
-import numpy as np
 from mpmath import harmonic, mp, exp, loggamma,log,polygamma,sqrt,re,cbrt
-from collections import deque
+from math import log10,floor,ceil
 import numbers
+from scipy.special._ufuncs import _beta_ppf
 mp.dps=25
 if __name__=="__main__":
     print("Libaries Loaded")
@@ -110,20 +109,20 @@ class dda:
         self.failures=failures
         self.d=d
         self.maxY=maxY
-        if stdev==None:
-            tmp=RobustBayesianAnalysis(self.d,150,self.successes,self.failures)
-            stdev=tmp.maxStdev()
-        self.stdev=stdev
+        self._dadx=1
         self.X=[]
     def f(self,a):
-        self.slope,self.dadx,y,x=ddydxdxAndOtherInfo(a+self.successes,self.d+self.successes+self.failures)
+        self.slope,self._dadx,y,x=ddydxdxAndOtherInfo(a+self.successes,self.d+self.successes+self.failures)
         self.X.append(x)
         return y
+    def dadx(self,x):
+        return self._dadx
     def ddydxdx(self,x,y):
-        return self.stdev*self.slope/(self.maxY*self.dadx**3)
+        return self.slope      
 class RobustBayesianAnalysis():
     MAXBINOMINALN=2<<31
     MAXPROB=2<<30
+    MAX64INT=2<<63-1
     def __init__(self,d,an:int=150,successes:int=0,failures:int=0):
         """"   
            d : Degree of Prior Certitude of Beliefs
@@ -135,7 +134,6 @@ class RobustBayesianAnalysis():
         self.an=an
         self.h=6.61889/(an**3)
         self.HPDB=highestProbDistBeliefForBetaDist
-        self.V=np.arange(0,self.d,self.h)
         self.successes=successes
         self.failures=failures
         self.sqrt2=sqrt(2)
@@ -153,18 +151,12 @@ class RobustBayesianAnalysis():
         return beta.variance
     def maxStdev(self):
         return self.maxVar()**.5
-    def sampler(self,f,ddfdxdx,h,upperbound,lowerbound,multi:numbers.Real=1,x=None,mini_h=None,minimum=0):
-        #not needed
-        # toClose=True
-        # if mini_h==None or mini_h==h:
-        #     mini_h=h
-        #     toClose=False
-        if x==None:
-            x=lowerbound
-        toClose=False
+    def sampler(self,f,ddfdxdx,h,upperbound,lowerbound,multi:numbers.Real=1,x=None,minimum=0,dadx=lambda x:1):
         "f is functions with one parameter x"
         "ddydxdx is a function with 2 parameters x,y"
         "Returns X,Y"
+        if x==None:
+            x=lowerbound        
         X,Y=[],[]      
         while lowerbound<=x and x<=upperbound:
             y=f(x)
@@ -173,23 +165,16 @@ class RobustBayesianAnalysis():
             Y.append(y)
             X.append(x)
             ddydxdx=abs(ddfdxdx(x,y))
-            if toClose:
-                xtmp=x+multi*mini_h
-                ytmp=f(xtmp)
-                ddydxdxtmp=abs(ddfdxdx(xtmp,ytmp))
-                toClose=ddydxdxtmp>ddydxdx
-                if toClose:
-                    ddydxdx=ddydxdxtmp
             if ddydxdx==0:
-                return X,Y                    
-            x+=multi*self.cbrt6*cbrt(h/ddydxdx)             
+                return X,Y        
+            x+=multi*self.cbrt6*cbrt(h/ddydxdx)*dadx(x)           
         return X,Y
     def computeGraph(self,ends:bool=None):
         """
         ends: If False cuts outs the regions with less than .1% relative likelyhood from the graph recommened when dealing with 10**6 or more datapoints
         """        
         if ends==None:
-            ends=(self.successes+self.failures+self.d)<(2<<20)
+            ends=(self.successes+self.failures+self.d)<(2<<16)
         self.lowerBeta,self.upperBeta=Beta(self.successes,self.d+self.failures),Beta(self.d+self.successes,self.failures)
         self.upperBeta.computeStats()
         self.lowerBeta.computeStats()
@@ -214,27 +199,25 @@ class RobustBayesianAnalysis():
         if not ends:
             minimum=maxY/1000
         ddydxdx=lambda x,y:derivatives(y,x,self.successes,self.d+self.failures,1,1)[1] #maxY*self.lowerBeta.stdev
-        mini_h=min(1,self.lowerBeta.stdev)*self.h
-        Xt,Yt=self.sampler(self.lowerBeta.pdf,ddydxdx,self.h,lowerBound,0,-1,lowerBound,mini_h,minimum)
+        Xt,Yt=self.sampler(self.lowerBeta.pdf,ddydxdx,self.h,lowerBound,0,-1,lowerBound,minimum)
         X.extend(reversed(Xt))
         upperProb.extend(reversed(Yt))
         lowerProb=[self.upperBeta.pdf(x) for x in X]
         XLow.extend(X)
         asamp=dda(self.successes,self.failures,self.d,maxY,self.maxstdev)
-        Yt=self.sampler(asamp.f,asamp.ddydxdx,self.h,self.d,0)[1]
+        Yt=self.sampler(asamp.f,asamp.ddydxdx,self.h,self.d,0,dadx=asamp.dadx)[1]
         X.extend(asamp.X)
         upperProb.extend(Yt)                 
         ddydxdx=lambda x,y:derivatives(y,x,self.successes+self.d,self.failures,1,1)[1] #maxY*self.upperBeta.stdev)
-        mini_h=min(1,self.upperBeta.stdev)*self.h
-        Xt,Yt=self.sampler(self.upperBeta.pdf,ddydxdx,self.h,swappoint,lowerBound,-1,swappoint,mini_h)
+        Xt,Yt=self.sampler(self.upperBeta.pdf,ddydxdx,self.h,swappoint,lowerBound,-1,swappoint)
         XLow.extend(reversed(Xt))
         lowerProb.extend(reversed(Yt))                     
         ddydxdx=lambda x,y:derivatives(y,x,self.successes,self.d+self.failures,1,1)[1] #maxY*self.lowerBeta.stdev
-        Xt,Yt=self.sampler(self.lowerBeta.pdf,ddydxdx,self.h,upperBound,swappoint,1,swappoint,mini_h)
+        Xt,Yt=self.sampler(self.lowerBeta.pdf,ddydxdx,self.h,upperBound,swappoint,1,swappoint)
         XLow.extend(Xt)
         lowerProb.extend(Yt)
         ddydxdx=lambda x,y:derivatives(y,x,self.successes+self.d,self.failures,1,1)[1] #maxY*self.upperBeta.stdev
-        Xt,Yt=self.sampler(self.upperBeta.pdf,ddydxdx,self.h,1,upperBound,1,upperBound,mini_h,minimum)
+        Xt,Yt=self.sampler(self.upperBeta.pdf,ddydxdx,self.h,1,upperBound,1,upperBound,minimum)
         if ends:
             Xt.append(1)
             Yt.append(self.upperBeta.pdf(1))
@@ -247,71 +230,42 @@ class RobustBayesianAnalysis():
             lowerProb=[y/maxY for y in lowerProb]
             print("MaxY="+str(maxY))         
         return X,upperProb,XLow,lowerProb        
-    def plotBeta(self,a,b):
+    def plotBeta(self,a,b,ends:bool=None):
+        print("------------------------------------")
+        print("a:{a}\tb:{b}".format(a=a,b=b))
+        if ends==None:
+            ends=(self.successes+self.failures+self.d)<(2<<16)        
         beta=Beta(a,b)
         beta.computeStats()
-        delta=self.h*beta.stdev
-        mp.dps=max(25,7+int(-1*log(delta))) 
+        print("Mean:{0:3g}".format(float(beta.mean)))        
+        print("Mode:{0:3g}".format(float(beta.mode)))
+        print("Beta Standard Deviation:{0:3g}".format(float(beta.stdev)))
+        self.reasonablevaluesprint([_beta_ppf(.05,a+1,b+1),_beta_ppf(.95,a+1,b+1)],"",3,"[]","Reasonable 90% Equal-Tailed Credible Interval is")
+        mp.dps=max(25,7+int(-1*log(beta.stdev/self.an)))
         maxY=beta.pdf(beta.mode)
-        mini_h=min(1,beta.stdev)*self.h
-        X=deque([])
-        Prob=deque([])
-        x=beta.mode
-        toClose=True
-        ddydxdx=lambda x,y:((a/x -b/(1-x))**2 -(a/(x*x) +b/((1-x)*(1-x))))*y/maxY
-        while x>0:
-            y=beta.pdf(x)
-            X.appendleft(x)
-            Prob.appendleft(y)
-            slope=abs(ddydxdx(x,y))
-            if toClose:
-                xtmp=x-mini_h
-                ytmp=beta.pdf(xtmp)
-                slopetmp=abs(ddydxdx(xtmp,ytmp))
-                if slopetmp>slope:
-                    step=self.sqrt2*sqrt(self.h/slopetmp)
-
-                    x-=max(mini_h,step)
-                else:
-                    toClose=False
-                    step=self.sqrt2*sqrt(self.h/slope)
-                    x-=max(mini_h,step)
-            else:
-                step=self.sqrt2*sqrt(self.h/slope)
-                x-=step  
-        X.appendleft(0)
-        Prob.appendleft(beta.pdf(0))
-        X,Prob=list(X)[:-1],list(Prob)[:-1] #so it doesnt have a duplicate points at x=beta.mode
-        toClose=True
-        x=beta.mode
-        while x<1:
-            y=beta.pdf(x)
-            X.append(x)
-            Prob.append(y)
-            slope=abs(ddydxdx(x,y))
-            if toClose:
-                xtmp=x+mini_h
-                ytmp=beta.pdf(xtmp)
-                slopetmp=abs(ddydxdx(xtmp,ytmp))
-                if slopetmp>slope:
-                    step=self.sqrt2*sqrt(self.h/slopetmp)
-
-                    x+=max(mini_h,step)
-                else:
-                    toClose=False
-                    step=self.sqrt2*sqrt(self.h/slope)
-                    x+=max(mini_h,step)
-            else:
-                step=self.sqrt2*sqrt(self.h/slope)
-                x+=step                            
-        X.append(1)
-        Prob.append(beta.pdf(1)) 
-        plt.plot(X,Prob,"k")
-        plt.xlabel("Population Success Chance Probabilty")
+        minimum=0
+        if not ends:
+            minimum=maxY/1000
+        X,Prob=[],[]
+        if ends:
+            X.append(0)
+            Prob.append(beta.pdf(0))
+        ddydxdx=lambda x,y:derivatives(y,x,a,b)[1]
+        Xt,Yt=self.sampler(beta.pdf,ddydxdx,self.h,beta.mode,0,-1,beta.mode,minimum)   
+        X.extend(reversed(Xt))
+        Prob.extend(reversed(Yt))
+        Xt,Yt=self.sampler(beta.pdf,ddydxdx,self.h,1,beta.mode,1,beta.mode,minimum)
+        X.extend(Xt)
+        Prob.extend(Yt)
+        if ends:
+            X.append(1)
+            Prob.append(beta.pdf(1)) 
+        plt.plot(X,Prob)
+        plt.xlabel("Population Success Probabilty")
         plt.ylabel("Probabilty")  
         plt.title("B(x;{0},{1})".format(a,b))
         plt.show()            
-    def reasonablevaluesprint(self,region,parameter_name:str="",sig_digits:int=3,format:str="pm"):
+    def reasonablevaluesprint(self,region,parameter_name:str="",sig_digits:int=3,format:str="pm",override:str=None):
         """
         region is a list or tuple in the following format [low1,upp1,low2,upp2,...,low_n,upp_n] which contains the reasonable values.
         parameter_name is the name of the parameter if not specifed is ommitted.
@@ -324,28 +278,32 @@ class RobustBayesianAnalysis():
         region=[float(r) for r in region]
         if format not in {"pm","[]","wordy"}:
             format="pm"
-        print("Reasonable Beliefs about the {0} are".format(parameter_name.capitalize()),end="")
+        if override==None:
+            print("Reasonable Beliefs about the {0} are".format(parameter_name.capitalize()),end="")
+        else:
+            print(override,end="")
         output=""
         for low,upp in zip(region[::2],region[1::2]):
-            agree_digits=0
-            for l,u in zip(str(low),str(upp)):
-                if l==u:
-                    if not l==".":
-                        agree_digits+=1
+            if low==upp:
+                output+=" the value{0:#.{s}g}".format(low,s=sig_digits)
+            else:
+                diff=abs(low-upp)
+                agree_order=floor(log10(diff))
+                if format=="pm":
+                    middle=(low+upp)/2
+                    middle,diff=round(middle,sig_digits-agree_order),round(diff,sig_digits-agree_order)
+                    output+=" {0:g} ± {1:g} and".format(middle,diff,n=sig_digits-agree_order)
                 else:
-                    break
-            if format=="pm":
-                middle=(low+upp)/2
-                diff=abs(low-upp)/2
-                if agree_digits==0:
-                    output+=" {0:#.{s}g} ± {0:#.{s}g} and".format(middle,diff,s=sig_digits)
-                else:
-                    output+=" {0:#.{n}g} ± {1:#.{s}g} and".format(middle,diff,n=agree_digits+sig_digits,s=sig_digits)
-            elif format== "[]":
-                low,upp=min(low),max(upp)
-                output+=" [{0:#.{s}g},{1:#.{s}g}] and".format(low,upp,s=sig_digits+agree_digits)
-            elif format== "wordy":
-                output+=" from {0:#.{s}g} to {1:#.{s}g} and".format(low,upp,s=sig_digits+agree_digits)
+                    low,upp=min(low,upp,key=lambda x:abs(x)),max(upp,low,key=lambda x:abs(x))
+                    if low==0:
+                        agree_order=min(agree_order,ceil(log10(abs(upp))))
+                    else:
+                        agree_order=min(agree_order,ceil(log10(abs(low))))
+                    low,upp=round(low,sig_digits-agree_order),round(upp,sig_digits-agree_order)                    
+                    if format== "[]":
+                        output+=" [{0:g},{1:g}] and".format(low,upp)
+                    elif format== "wordy":
+                        output+=" from {0:g} to {1:g} and".format(low,upp)
         print(output[:-4])
     def stats(self,ends:bool=None,posteior:bool=True):
         """
@@ -362,7 +320,13 @@ class RobustBayesianAnalysis():
         minvarBeta.computeStats()
         self.reasonablevaluesprint((self.lowerBeta.mean,self.upperBeta.mean),"mean") 
         self.reasonablevaluesprint((self.lowerBeta.mode,self.upperBeta.mode),"mode") 
-        self.reasonablevaluesprint((minvarBeta.stdev,self.maxstdev),"standard deviation")
+        self.reasonablevaluesprint((minvarBeta.stdev,self.maxstdev),"standard deviation of Beta dist")
+        at,bt=self.successes+1,self.failures+1
+        if at+self.d>RobustBayesianAnalysis.MAX64INT:
+            at=float(at)
+        if bt+self.d>RobustBayesianAnalysis.MAX64INT:
+            bt=float(bt)
+        self.reasonablevaluesprint([_beta_ppf(.05,at,bt+self.d),_beta_ppf(.95,at+self.d,bt)],"",3,"[]","Reasonable 90% Equal-Tailed Credible Interval is")
         # import pandas as pd
         # ends_=(ends in [True,None])
         # data={"x":[round(float(x),6) for x in X],"y":[round(float(p),6) for p in upperProb]}
@@ -371,7 +335,7 @@ class RobustBayesianAnalysis():
         # data={"x":[round(float(x),6) for x in XLow],"y":[round(float(p),6) for p in lowerProb]}    
         # df=pd.DataFrame(data)
         # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)          
-        print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
+        # print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
         plt.plot(X,upperProb)
         plt.plot(XLow,lowerProb)
         plt.xlabel("Population Success Probabilty")
@@ -379,8 +343,16 @@ class RobustBayesianAnalysis():
         plt.title("Reasonable Postetiors")
         plt.legend(["Upper Probabilty","Lower Probabilty"])  
         plt.show()   
-
-
+class rand:
+    _called=False
+    binomial=None
+    normal=None
+    def __init__(self):
+        if not rand._called:
+            import numpy.random as random
+            rng=random.Generator(random.SFC64())
+            rand.binomial=lambda n,p:rng.binomial(n,p)
+            rand.normal=lambda mu,stdev:rng.normal(mu,stdev)
 class Demo(RobustBayesianAnalysis):
     def __init__(self,p,n,an):
         """p : Population Success Probabilty
@@ -389,22 +361,21 @@ class Demo(RobustBayesianAnalysis):
         """              
         super().__init__(n,an)
         self.p=p
-        self.rng=np.random.Generator(np.random.SFC64())    
+        rand()
     def getData(self,n):
         "perform n samples of the population"
         if n<self.MAXBINOMINALN:
-            successes=self.rng.binomial(n,self.p)
+            successes=rand.binomial(n,self.p)
         else:
             stdev=(sqrt(n*self.p*(1-self.p)))
-            successes=round(np.random.normal(self.p*n,stdev))
+            successes=round(rand.normal(self.p*n,stdev))
         failures=n-successes
         self.successes+=successes
         self.failures+=failures
         print("------------------------------------")        
         print("Observed {0} Successes and {1} Failures".format(successes,failures))
         print("Total Successes {0} out of {1}".format(self.successes,self.successes+self.failures))        
-
-if __name__=="__main__":         
+if __name__=="__main__":      
     Analysis=Demo(.7,10,250)  
     Analysis.stats(True,False)
     while True:
