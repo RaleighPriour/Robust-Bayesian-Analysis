@@ -143,7 +143,7 @@ class RobustBayesianAnalysis():
         a,b=self.successes,self.failures
         if self.successes>self.failures:
             a,b=b,a
-        aoptimal=float(((.75*b+7/6)**2-1/9)**.5-(.25*b+1.5))#in case of mpmath
+        aoptimal=float(((.75*b+1.5)**2-17/9)**.5-(.25*b+7/6))#in case of mpmath
         if aoptimal>a:
             a=min(a+self.d,aoptimal)
         beta=Beta(a,b)
@@ -336,8 +336,9 @@ class RobustBayesianAnalysis():
         # df=pd.DataFrame(data)
         # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)          
         # print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
-        plt.plot(X,upperProb)
-        plt.plot(XLow,lowerProb)
+        #plt.figure(figsize=(2.5,3.5))
+        plt.plot(X,upperProb)#,"k")
+        plt.plot(XLow,lowerProb)#,"k",linestyle="--")
         plt.xlabel("Population Success Probabilty")
         plt.ylabel("Probabilty")
         plt.title("Reasonable Postetiors")
