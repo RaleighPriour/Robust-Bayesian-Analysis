@@ -143,7 +143,7 @@ class RobustBayesianAnalysis():
         a,b=self.successes,self.failures
         if self.successes>self.failures:
             a,b=b,a
-        aoptimal=float(((.75*b+1.5)**2-17/9)**.5-(.25*b+7/6))#in case of mpmath
+        aoptimal=float(((.75*b+7/6)**2-1/9)**.5-(.25*b+1.5))#in case of mpmath
         if aoptimal>a:
             a=min(a+self.d,aoptimal)
         beta=Beta(a,b)
@@ -327,6 +327,8 @@ class RobustBayesianAnalysis():
         if bt+self.d>RobustBayesianAnalysis.MAX64INT:
             bt=float(bt)
         self.reasonablevaluesprint([_beta_ppf(.05,at,bt+self.d),_beta_ppf(.95,at+self.d,bt)],"",3,"[]","Reasonable 90% Equal-Tailed Credible Interval is")
+        self.reasonablevaluesprint([_beta_ppf(.025,at,bt+self.d),_beta_ppf(.975,at+self.d,bt)],"",3,"[]","Reasonable 95% Equal-Tailed Credible Interval is")
+        self.reasonablevaluesprint([_beta_ppf(.005,at,bt+self.d),_beta_ppf(.995,at+self.d,bt)],"",3,"[]","Reasonable 99% Equal-Tailed Credible Interval is")
         # import pandas as pd
         # ends_=(ends in [True,None])
         # data={"x":[round(float(x),6) for x in X],"y":[round(float(p),6) for p in upperProb]}
@@ -336,13 +338,12 @@ class RobustBayesianAnalysis():
         # df=pd.DataFrame(data)
         # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)          
         # print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
-        #plt.figure(figsize=(2.5,3.5))
         plt.plot(X,upperProb)#,"k")
         plt.plot(XLow,lowerProb)#,"k",linestyle="--")
         plt.xlabel("Population Success Probabilty")
         plt.ylabel("Probabilty")
         plt.title("Reasonable Postetiors")
-        plt.legend(["Upper Probabilty","Lower Probabilty"])  
+        plt.legend(["Upper Probabilty","Lower Probabilty"])
         plt.show()   
 class rand:
     _called=False
@@ -377,6 +378,21 @@ class Demo(RobustBayesianAnalysis):
         print("Observed {0} Successes and {1} Failures".format(successes,failures))
         print("Total Successes {0} out of {1}".format(self.successes,self.successes+self.failures))        
 if __name__=="__main__":      
+    s,f,t,x,y,h=2,10,10,0,0,.01
+    var=lambda a,b:(a+1)*(b+1)/((a+b+3)*(a+b+2)**2)
+    maxVar,cords=0,[]
+    while x<=t:
+        y,yt=0,t-x
+        while y<=yt:
+            v=var(s+x,f+y)
+            if v>maxVar:
+                maxVar=v
+                cords=[s+x,f+y]
+            y+=h
+        x+=h
+    print(maxVar,cords)
+    tmp=RobustBayesianAnalysis(t,150,s,f)
+    input(tmp.maxVar())
     Analysis=Demo(.7,10,250)  
     Analysis.stats(True,False)
     while True:
