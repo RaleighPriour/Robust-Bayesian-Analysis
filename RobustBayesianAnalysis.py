@@ -305,10 +305,11 @@ class RobustBayesianAnalysis():
                     elif format== "wordy":
                         output+=" from {0:g} to {1:g} and".format(low,upp)
         print(output[:-4])
-    def stats(self,ends:bool=None,posteior:bool=True):
+    def stats(self,ends:bool=None,posteior:bool=True,MoreAnalysis=None):
         """
         ends: If False cuts outs the regions with less than .1% relative likelyhood from the graph recommened when dealing with 10**6 or more datapoints
         posteior: If False displays and gives statistics as prior not posteior
+        MoreAnalysis function that does stuff with the data right before it plots for doing more analysis to the data
         """
         print("------------------------------------")
         print("Successes:{0}\tFailures:{1}\tTotal:{2}".format(self.successes,self.failures,self.successes+self.failures))
@@ -329,15 +330,8 @@ class RobustBayesianAnalysis():
         self.reasonablevaluesprint([_beta_ppf(.05,at,bt+self.d),_beta_ppf(.95,at+self.d,bt)],"",3,"[]","Reasonable 90% Equal-Tailed Credible Interval is")
         self.reasonablevaluesprint([_beta_ppf(.025,at,bt+self.d),_beta_ppf(.975,at+self.d,bt)],"",3,"[]","Reasonable 95% Equal-Tailed Credible Interval is")
         self.reasonablevaluesprint([_beta_ppf(.005,at,bt+self.d),_beta_ppf(.995,at+self.d,bt)],"",3,"[]","Reasonable 99% Equal-Tailed Credible Interval is")
-        # import pandas as pd
-        # ends_=(ends in [True,None])
-        # data={"x":[round(float(x),6) for x in X],"y":[round(float(p),6) for p in upperProb]}
-        # df=pd.DataFrame(data)
-        # df.to_csv("RBA {d} upper ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)    
-        # data={"x":[round(float(x),6) for x in XLow],"y":[round(float(p),6) for p in lowerProb]}    
-        # df=pd.DataFrame(data)
-        # df.to_csv("RBA {d} lower ends={ends} S&P500.csv".format(d=self.d,ends=ends_),sep=",",index=False)          
-        # print("{0} Calculated".format(["Priors","Posteiors"][posteior]))
+        if MoreAnalysis!=None:
+            return MoreAnalysis(vars())
         plt.plot(X,upperProb)#,"k")
         plt.plot(XLow,lowerProb)#,"k",linestyle="--")
         plt.xlabel("Population Success Probabilty")
